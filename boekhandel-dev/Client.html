@@ -1,0 +1,641 @@
+
+<script>
+let appData = {
+  items: [],
+  itemTypes: [],
+  platforms: [],
+  sales: [],
+  nextReference: ''
+};
+
+let selectedItemId = null;
+
+const pageNames = {
+  dashboard: 'Tauler',
+  inventory: 'Inventari',
+  'new-item': 'Nou article',
+  publications: 'Publicacions',
+  sales: 'Vendes',
+  reports: 'Informes'
+};
+
+
+const translations = {
+  ca: {
+    "No s’ha trobat l’article.": "No s’ha trobat l’article.",
+    "Cal introduir un títol o una descripció.": "Cal introduir un títol o una descripció.",
+    "Cal seleccionar un tipus d’article.": "Cal seleccionar un tipus d’article.",
+    "El tipus d’article seleccionat no és vàlid.": "El tipus d’article seleccionat no és vàlid.",
+    "El preu introduït no és vàlid.": "El preu introduït no és vàlid.",
+    "L’any de publicació no és vàlid.": "L’any de publicació no és vàlid.",
+    "L’ISBN no és vàlid.": "L’ISBN no és vàlid.",
+    "No s’ha trobat el llibre.": "No s’ha trobat el llibre.",
+    "Article desat correctament.": "Article desat correctament.",
+    "Article actualitzat correctament.": "Article actualitzat correctament.",
+    "Error de connexió.": "Error de connexió.",
+    // Toevoegen aan translations.ca
+    appName: 'Velles i Novelles',
+    appSubtitle: "Gestió d'inventari",
+    mainMenu: 'MENÚ PRINCIPAL',
+    dashboard: 'Tauler',
+    inventory: 'Inventari',
+    newItem: 'Nou article',
+    management: 'GESTIÓ',
+    publications: 'Publicacions',
+    sales: 'Vendes',
+    reports: 'Informes',
+    connected: 'Google Sheets connectat'
+  },
+
+  es: {
+    "No s’ha trobat l’article.": "No se ha encontrado el artículo.",
+    "Cal introduir un títol o una descripció.": "Debes introducir un título o una descripción.",
+    "Cal seleccionar un tipus d’article.": "Debes seleccionar un tipo de artículo.",
+    "El tipus d’article seleccionat no és vàlid.": "El tipo de artículo seleccionado no es válido.",
+    "El preu introduït no és vàlid.": "El precio introducido no es válido.",
+    "L’any de publicació no és vàlid.": "El año de publicación no es válido.",
+    "L’ISBN no és vàlid.": "El ISBN no es válido.",
+    "No s’ha trobat el llibre.": "No se ha encontrado el libro.",
+    "Article desat correctament.": "Artículo guardado correctamente.",
+    "Article actualitzat correctament.": "Artículo actualizado correctamente.",
+    "Error de connexió.": "Error de conexión.",
+    // Toevoegen aan translations.es
+    appName: 'Velles i Novelles',
+    appSubtitle: 'Gestión de inventario',
+    mainMenu: 'MENÚ PRINCIPAL',
+    dashboard: 'Panel',
+    inventory: 'Inventario',
+    newItem: 'Nuevo artículo',
+    management: 'GESTIÓN',
+    publications: 'Publicaciones',
+    sales: 'Ventas',
+    reports: 'Informes',
+    connected: 'Google Sheets conectado'
+  },
+
+  en: {
+    "No s’ha trobat l’article.": "The item could not be found.",
+    "Cal introduir un títol o una descripció.": "A title or description is required.",
+    "Cal seleccionar un tipus d’article.": "You must select an item type.",
+    "El tipus d’article seleccionat no és vàlid.": "The selected item type is invalid.",
+    "El preu introduït no és vàlid.": "The entered price is invalid.",
+    "L’any de publicació no és vàlid.": "The publication year is invalid.",
+    "L’ISBN no és vàlid.": "The ISBN is invalid.",
+    "No s’ha trobat el llibre.": "The book could not be found.",
+    "Article desat correctament.": "Item saved successfully.",
+    "Article actualitzat correctament.": "Item updated successfully.",
+    "Error de connexió.": "Connection error.",
+    // Toevoegen aan translations.en
+    appName: 'Velles i Novelles',
+    appSubtitle: 'Inventory management',
+    mainMenu: 'MAIN MENU',
+    dashboard: 'Dashboard',
+    inventory: 'Inventory',
+    newItem: 'New item',
+    management: 'MANAGEMENT',
+    publications: 'Publications',
+    sales: 'Sales',
+    reports: 'Reports',
+    connected: 'Google Sheets connected'
+  }
+};
+
+function getLanguage() {
+  const language = appData && appData.language
+    ? String(appData.language).toLowerCase()
+    : 'ca';
+
+  return translations[language] ? language : 'ca';
+}
+
+function applyTranslations() {
+  const language = getLanguage();
+  const dictionary = translations[language];
+
+  document.querySelectorAll('[data-i18n]').forEach(element => {
+    const key = element.dataset.i18n;
+
+    if (dictionary[key] !== undefined) {
+      element.textContent = dictionary[key];
+    }
+  });
+}
+
+function translateMessage(message) {
+  const language = getLanguage();
+  const dictionary = translations[language] || translations.ca;
+
+  return dictionary[message] || message;
+}
+
+function showPage(page) {
+  document.querySelectorAll('.page').forEach(el => {
+    el.classList.add('hidden');
+  });
+
+  document.getElementById(page + '-page').classList.remove('hidden');
+
+  document.querySelectorAll('.nav-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.page === page);
+  });
+
+  document.getElementById('page-title').textContent = pageNames[page];
+  document.getElementById('breadcrumb-page').textContent = pageNames[page];
+
+  if (page === 'inventory') renderInventory();
+  if (page === 'new-item') prepareNewItem();
+}
+
+function loadData(onLoaded) {
+  google.script.run
+    .withSuccessHandler(data => {
+      appData = data;
+      applyTranslations();
+      renderDashboard();
+      renderInventory();
+      renderItemTypes();
+      updateReferenceWarning();
+
+      if (typeof onLoaded === 'function') {
+        onLoaded();
+      }
+    })
+    .withFailureHandler(showError)
+    .getInitialData();
+}
+
+function renderDashboard() {
+  const activeItems = appData.items.filter(item =>
+    String(item.status).toLowerCase() === 'active'
+  );
+
+  const inventoryValue = activeItems.reduce((sum, item) => {
+    return sum + (Number(item.asking_price) || 0);
+  }, 0);
+
+  document.getElementById('stat-items').textContent =
+    activeItems.length.toLocaleString('ca-ES');
+
+  document.getElementById('stat-value').textContent =
+    formatCurrency(inventoryValue);
+
+  document.getElementById('stat-sales').textContent =
+    appData.sales.length.toLocaleString('ca-ES');
+
+  document.getElementById('stat-types').textContent =
+    appData.itemTypes.filter(type =>
+      String(type.active).toUpperCase() !== 'FALSE'
+    ).length.toLocaleString('ca-ES');
+
+  const recent = [...activeItems]
+    .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
+    .slice(0, 5);
+
+  const container = document.getElementById('recent-items');
+
+  if (!recent.length) {
+    container.innerHTML =
+      '<div class="empty-state">Encara no hi ha articles registrats.</div>';
+    return;
+  }
+
+  container.innerHTML = createTable(recent);
+}
+
+function renderInventory() {
+  const search = (
+    document.getElementById('inventory-search')?.value || ''
+  ).toLowerCase().trim();
+
+  const selectedType =
+    document.getElementById('inventory-type-filter')?.value || '';
+
+  const filtered = appData.items
+    .filter(item => String(item.status).toLowerCase() === 'active')
+    .filter(item => !selectedType ||
+      String(item.item_type_id) === selectedType
+    )
+    .filter(item => {
+      const haystack = [
+        item.reference_no,
+        item.title,
+        item.author,
+        item.isbn
+      ].join(' ').toLowerCase();
+
+      return haystack.includes(search);
+    })
+    .sort((a, b) =>
+      Number(b.reference_no) - Number(a.reference_no)
+    );
+
+  const container = document.getElementById('inventory-table');
+
+  if (!filtered.length) {
+    container.innerHTML =
+      '<div class="empty-state">No s’han trobat articles.</div>';
+    return;
+  }
+
+  container.innerHTML = createTable(filtered);
+}
+
+function createTable(items) {
+  const rows = items.map(item => `
+    <tr>
+      <td class="reference">${escapeHtml(item.reference_no)}</td>
+      <td>${escapeHtml(item.title)}</td>
+      <td>${escapeHtml(item.author || '—')}</td>
+      <td>${escapeHtml(item.isbn || '—')}</td>
+      <td>${item.asking_price === '' || item.asking_price == null
+        ? '—'
+        : formatCurrency(item.asking_price)}</td>
+      <td>
+        <button
+          class="small-button edit-item-button"
+          data-item-id="${escapeHtml(item.item_id)}">
+          Modificar
+        </button>
+      </td>
+    </tr>
+  `).join('');
+
+  return `
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Referència</th>
+          <th>Títol</th>
+          <th>Autor</th>
+          <th>ISBN</th>
+          <th>Preu</th>
+          <th>Accions</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+
+function renderItemTypes() {
+  const activeTypes = appData.itemTypes
+    .filter(type => String(type.active).toUpperCase() !== 'FALSE')
+    .sort((a, b) =>
+      String(a.name_ca).localeCompare(String(b.name_ca))
+    );
+
+  const itemSelect = document.getElementById('item_type_id');
+  const filterSelect = document.getElementById('inventory-type-filter');
+
+  const previousFilter = filterSelect.value;
+
+  itemSelect.innerHTML =
+    '<option value="">Selecciona un tipus</option>';
+
+  filterSelect.innerHTML =
+    '<option value="">Tots els tipus</option>';
+
+  activeTypes.forEach(type => {
+    const itemOption = document.createElement('option');
+    itemOption.value = type.item_type_id;
+    itemOption.textContent = type.name_ca;
+    itemSelect.appendChild(itemOption);
+
+    const filterOption = document.createElement('option');
+    filterOption.value = type.item_type_id;
+    filterOption.textContent = type.name_ca;
+    filterSelect.appendChild(filterOption);
+  });
+
+  filterSelect.value = previousFilter;
+}
+
+function updateReferenceWarning() {
+  const warning = document.getElementById('reference-warning');
+  const saveButton = document.getElementById('save-button');
+
+  const next = Number(appData.nextReference);
+  const validReference = Number.isInteger(next) && next > 0;
+
+  if (selectedItemId) {
+    warning.textContent =
+      'Estàs modificant un article existent. La referència no canviarà.';
+    warning.classList.remove('hidden');
+    saveButton.disabled = false;
+    return;
+  }
+
+  if (!validReference) {
+    warning.textContent =
+      'Cal configurar NEXT_REFERENCE_NO al full Settings abans de crear articles.';
+    warning.classList.remove('hidden');
+    saveButton.disabled = true;
+  } else {
+    warning.textContent =
+      'La pròxima referència disponible serà: ' + next;
+    warning.classList.remove('hidden');
+    saveButton.disabled = appData.itemTypes.length === 0;
+  }
+}
+
+function prepareNewItem() {
+  document.getElementById('item-form').reset();
+
+  document.getElementById('form-heading').textContent =
+    'Afegir un article';
+
+  document.getElementById('form-description').textContent =
+    'Introdueix les dades bàsiques de l’article.';
+
+  document.getElementById('save-button').textContent =
+    'Desar article';
+
+  renderItemTypes();
+  updateReferenceWarning();
+
+  if (!appData.itemTypes.length) {
+    const warning = document.getElementById('reference-warning');
+    warning.textContent =
+      'Cal configurar primer els tipus d’article al full ItemTypes.';
+    warning.classList.remove('hidden');
+    document.getElementById('save-button').disabled = true;
+  }
+}
+
+function submitItem(event) {
+  event.preventDefault();
+  if (!validatePrice()) {
+    return;
+  }
+
+  const form = {
+    item_type_id: document.getElementById('item_type_id').value,
+    title: document.getElementById('title').value,
+    author: document.getElementById('author').value,
+    illustrator: document.getElementById('illustrator').value,
+    collection: document.getElementById('collection').value,
+    publisher: document.getElementById('publisher').value,
+    publication_year: document.getElementById('publication_year').value,
+    isbn: document.getElementById('isbn').value,
+    cover_type: document.getElementById('cover_type').value,
+    dimensions: document.getElementById('dimensions').value,
+    pages: document.getElementById('pages').value,
+    weight: document.getElementById('weight').value,
+    edition: document.getElementById('edition').value,
+    condition: document.getElementById('condition').value,
+    asking_price: document.getElementById('asking_price').value
+  };
+
+  const isEditing = Boolean(selectedItemId);
+  const button = document.getElementById('save-button');
+
+  button.disabled = true;
+  button.textContent = 'Desant...';
+
+  const request = google.script.run
+    .withSuccessHandler(result => {
+      showMessage(
+        (isEditing ? 'Article actualitzat. ' : 'Article creat. ') +
+        'Referència: ' + result.reference_no,
+        'success'
+      );
+
+      selectedItemId = null;
+      button.disabled = false;
+      button.textContent = 'Desar article';
+
+      loadData(() => {
+        showPage('inventory');
+      });
+    })
+    .withFailureHandler(error => {
+      button.disabled = false;
+      button.textContent = isEditing ? 'Desar canvis' : 'Desar article';
+      showError(error);
+    });
+
+  if (isEditing) {
+    request.updateItem(selectedItemId, form);
+  } else {
+    request.saveItem(form);
+  }
+}
+
+function formatCurrency(value) {
+  return new Intl.NumberFormat('ca-ES', {
+    style: 'currency',
+    currency: 'EUR'
+  }).format(Number(value) || 0);
+}
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, char => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  })[char]);
+}
+
+function validatePrice() {
+  const input = document.getElementById('asking_price');
+  const error = document.getElementById('asking_price_error');
+
+  const value = input.value.trim();
+
+  // Een leeg bedrag is toegestaan.
+  const valid = value === '' ||
+    /^\d+([,.]\d{1,2})?$/.test(value);
+
+  if (!valid) {
+    input.classList.add('invalid');
+    error.textContent =
+      'Preu no vàlid. Introdueix un màxim de dos decimals (exemple: 12,50).';
+    error.classList.remove('hidden');
+
+    input.focus();
+    return false;
+  }
+
+  input.classList.remove('invalid');
+  error.classList.add('hidden');
+  error.textContent = '';
+
+  return true;
+}
+
+function clearPriceError() {
+  const input = document.getElementById('asking_price');
+  const error = document.getElementById('asking_price_error');
+
+  input.classList.remove('invalid');
+  error.classList.add('hidden');
+  error.textContent = '';
+}
+
+function showError(error) {
+  const message = error && error.message
+    ? error.message
+    : String(error);
+
+  showMessage(translateMessage(message), 'error');
+}
+
+function showMessage(message, type) {
+  const area = document.getElementById('message-area');
+  area.innerHTML = '';
+
+  const div = document.createElement('div');
+  div.className = 'message ' + type;
+  div.textContent = translateMessage(message);
+  area.appendChild(div);
+}
+
+function startNewItem() {
+  selectedItemId = null;
+  showPage('new-item');
+}
+
+function lookupIsbn() {
+  const isbnInput = document.getElementById('isbn');
+  const message = document.getElementById('isbn_lookup_message');
+  const button = document.getElementById('lookup_isbn_button');
+
+  const isbn = isbnInput.value.trim();
+
+  message.classList.add('hidden');
+  message.textContent = '';
+
+  if (!isbn) {
+    message.textContent = 'Voer eerst een ISBN in.';
+    message.classList.remove('hidden');
+    return;
+  }
+
+  button.disabled = true;
+  button.textContent = 'Zoeken...';
+
+  google.script.run
+    .withSuccessHandler(result => {
+      button.disabled = false;
+      button.textContent = 'Opzoeken';
+
+      if (!result.found) {
+        message.textContent = result.message;
+        message.classList.remove('hidden');
+        return;
+      }
+
+      // Vul alleen lege velden in.
+      // Handmatig ingevoerde waarden blijven behouden.
+      fillMetadataField('title', result.title);
+      fillMetadataField('author', result.author);
+      fillMetadataField('publisher', result.publisher);
+      fillMetadataField('publication_year', result.publication_year);
+      fillMetadataField('pages', result.pages);
+      fillMetadataField('dimensions', result.dimensions);
+
+      message.textContent =
+        'Boekgegevens gevonden via ' + result.source +
+        '. Controleer de ingevulde gegevens.';
+      message.classList.remove('hidden');
+    })
+    .withFailureHandler(error => {
+      button.disabled = false;
+      button.textContent = 'Opzoeken';
+
+      message.textContent =
+        error.message || 'Er ging iets mis bij het opzoeken.';
+      message.classList.remove('hidden');
+    })
+    .lookupBookByIsbn(isbn);
+}
+
+function fillMetadataField(fieldId, value) {
+  const field = document.getElementById(fieldId);
+
+  if (field && value !== '' && !field.value.trim()) {
+    field.value = value;
+  }
+}
+
+function editItem(itemId) {
+  const item = appData.items.find(record =>
+    String(record.item_id) === String(itemId)
+  );
+
+  if (!item) {
+    showError('No s’ha trobat l’article.');
+    return;
+  }
+
+  selectedItemId = itemId;
+  showPage('new-item');
+
+  const fields = [
+    'item_type_id',
+    'title',
+    'author',
+    'illustrator',
+    'collection',
+    'publisher',
+    'publication_year',
+    'isbn',
+    'cover_type',
+    'dimensions',
+    'pages',
+    'weight',
+    'edition',
+    'condition',
+    'asking_price'
+  ];
+
+  fields.forEach(field => {
+    document.getElementById(field).value =
+      item[field] == null ? '' : item[field];
+  });
+
+  document.getElementById('form-heading').textContent =
+    'Modificar article';
+
+  document.getElementById('form-description').textContent =
+    'Actualitza les dades de l’article.';
+
+  document.getElementById('save-button').textContent =
+    'Desar canvis';
+
+  updateReferenceWarning();
+}
+
+function handleItemTableClick(event) {
+  const button = event.target.closest('.edit-item-button');
+
+  if (button) {
+    editItem(button.dataset.itemId);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.nav-item').forEach(button => {
+    button.addEventListener('click', () => {
+      if (button.dataset.page === 'new-item') {
+        startNewItem();
+      } else {
+        showPage(button.dataset.page);
+      }
+    });
+  });
+
+  // Bewerken vanuit dashboard én inventaris
+  document.addEventListener('click', handleItemTableClick);
+
+  loadData();
+
+  document.getElementById('lookup_isbn_button')
+    .addEventListener('click', lookupIsbn);
+
+  document.getElementById('asking_price')
+    .addEventListener('input', clearPriceError);
+});
+</script>

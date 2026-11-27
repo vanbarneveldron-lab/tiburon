@@ -299,30 +299,33 @@ function createTable(items) {
 }
 
 function renderItemTypes() {
+  const language = getLanguage();
+  const nameKey = 'name_' + language;
+  const displayName = type =>
+    String(type[nameKey] || type.name_ca || type.item_type_id || '');
+
   const activeTypes = appData.itemTypes
     .filter(type => String(type.active).toUpperCase() !== 'FALSE')
-    .sort((a, b) =>
-      String(a.name_ca).localeCompare(String(b.name_ca))
-    );
+    .sort((a, b) => displayName(a).localeCompare(displayName(b), language));
 
   const itemSelect = document.getElementById('item_type_id');
   const filterSelect = document.getElementById('inventory-type-filter');
 
   const previousFilter = filterSelect.value;
 
-  const dictionary = translations[getLanguage()];
+  const dictionary = translations[language];
   itemSelect.innerHTML = '<option value="">' + dictionary.typePlaceholder + '</option>';
   filterSelect.innerHTML = '<option value="">' + dictionary.allTypes + '</option>';
 
   activeTypes.forEach(type => {
     const itemOption = document.createElement('option');
     itemOption.value = type.item_type_id;
-    itemOption.textContent = type.name_ca;
+    itemOption.textContent = displayName(type);
     itemSelect.appendChild(itemOption);
 
     const filterOption = document.createElement('option');
     filterOption.value = type.item_type_id;
-    filterOption.textContent = type.name_ca;
+    filterOption.textContent = displayName(type);
     filterSelect.appendChild(filterOption);
   });
 

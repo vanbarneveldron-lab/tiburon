@@ -18,3 +18,5 @@ The new-item and inventory-filter dropdowns display the name for the configured 
 ## Sales module (DEV)
 
 A sale is created from an active inventory item. Each sale stores the item ID and reference, ISO sale date, required free-text sales channel, VAT-inclusive gross price, VAT rate, VAT amount, net amount, invoice placeholders, and status in the existing `Sales` sheet schema. The VAT rate defaults to 4% in the form and accepts a rate from 0% to 100% with up to two decimal places. Sales can be reversed: the sale row remains for the audit trail with status `reversed`, and the item returns to `active`. Reversed sales are retained in history and excluded from the active sales count. The channel is free text until the publishing module can provide platform choices.
+
+The Publications screen records manual listings against active inventory items and configured active Platforms, with listing and withdrawal dates. Withdrawal keeps the record for history. The Reports screen summarizes active sales between optional inclusive start and end dates (defaulting to the current year through today), including gross, VAT, net, and count. Reversed sales are excluded.

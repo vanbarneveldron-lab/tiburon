@@ -271,8 +271,17 @@
 
       <section id="publications-page" class="page hidden">
         <div class="content-card">
-          <h3>Publicacions</h3>
-          <p>Aquesta secció s'incorporarà en la següent fase.</p>
+          <div class="card-heading"><div><h3>Publicacions</h3><p>Registreu manualment on i quan s’ha publicat cada article.</p></div></div>
+          <form id="publication-form">
+            <div class="form-grid">
+              <label class="field"><span>Article</span><select id="publication-item" required></select></label>
+              <label class="field"><span>Plataforma</span><select id="publication-platform" required></select></label>
+              <label class="field"><span>Data de publicació</span><input id="publication-date" type="date" required></label>
+            </div>
+            <div class="form-actions"><button id="save-publication-button" class="primary-button" type="submit">Registra la publicació</button></div>
+          </form>
+        </div>
+        <div class="content-card"><h3>Historial de publicacions</h3><div id="publications-table"></div>
         </div>
       </section>
 
@@ -327,8 +336,13 @@
 
       <section id="reports-page" class="page hidden">
         <div class="content-card">
-          <h3>Informes</h3>
-          <p>Aquesta secció s'incorporarà en la següent fase.</p>
+          <h3>Informe d’IVA</h3>
+          <p>Resum de vendes actives dins del període seleccionat.</p>
+          <div class="form-grid report-filters">
+            <label class="field"><span>Des de</span><input id="report-from" type="date"></label>
+            <label class="field"><span>Fins a</span><input id="report-to" type="date"></label>
+          </div>
+          <div id="vat-report"></div>
         </div>
       </section>
     </main>

@@ -126,10 +126,44 @@ function getInitialData() {
     items: getRecords('Items'),
     itemTypes: getRecords('ItemTypes'),
     platforms: getRecords('Platforms'),
+    publications: getRecords('Publications'),
     sales: getRecords('Sales'),
     nextReference: getSetting('NEXT_REFERENCE_NO'),
     language: getSetting('APP_LANGUAGE') || 'ca'
   };
+}
+
+function recordPublication(form) {
+  if (!form || !String(form.item_id || '').trim()) throw new Error('PUBLICATION_ITEM_REQUIRED');
+  const item = getRecords('Items').find(row => String(row.item_id) === String(form.item_id));
+  if (!item || String(item.status).toLowerCase() !== 'active') throw new Error('PUBLICATION_ITEM_INVALID');
+  const platformId = String(form.platform_id || '').trim();
+  const platform = getRecords('Platforms').find(row => String(row.platform_id) === platformId && String(row.active).toUpperCase() !== 'FALSE');
+  if (!platform) throw new Error('PUBLICATION_PLATFORM_INVALID');
+  const listedAt = String(form.listed_at || '').trim();
+  if (!isValidSaleDate(listedAt)) throw new Error('PUBLICATION_DATE_INVALID');
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const id = Utilities.getUuid();
+    appendRecord('Publications', { publication_id: id, item_id: item.item_id, platform_id: platform.platform_id, status: 'active', listed_at: listedAt, withdrawn_at: '' });
+    logChange('Publications', id, 'CREATE', 'Recorded publication of item ' + item.reference_no + ' on ' + platform.name);
+    return { success: true };
+  } finally { lock.releaseLock(); }
+}
+
+function withdrawPublication(publicationId) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const publication = getRecords('Publications').find(row => String(row.publication_id) === String(publicationId));
+    if (!publication) throw new Error('PUBLICATION_NOT_FOUND');
+    if (String(publication.status).toLowerCase() !== 'active') throw new Error('PUBLICATION_ALREADY_WITHDRAWN');
+    const date = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+    if (!updateRecordFields('Publications', 'publication_id', publicationId, { status: 'withdrawn', withdrawn_at: date })) throw new Error('PUBLICATION_UPDATE_FAILED');
+    logChange('Publications', publicationId, 'WITHDRAW', 'Withdrew publication');
+    return { success: true };
+  } finally { lock.releaseLock(); }
 }
 
 function saveItem(form) {

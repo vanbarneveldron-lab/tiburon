@@ -4,6 +4,7 @@ let appData = {
   items: [],
   itemTypes: [],
   platforms: [],
+  publications: [],
   sales: [],
   nextReference: ''
 };
@@ -300,6 +301,8 @@ function showPage(page) {
 
   if (page === 'inventory') renderInventory();
   if (page === 'sales') renderSalesHistory();
+  if (page === 'publications') { renderPublications(); renderPublicationOptions(); }
+  if (page === 'reports') renderVatReport();
   if (page === 'new-item') prepareNewItem();
 }
 
@@ -312,6 +315,9 @@ function loadData(onLoaded) {
       renderInventory();
       renderItemTypes();
       renderSalesHistory();
+      renderPublications();
+      renderPublicationOptions();
+      renderVatReport();
       updateReferenceWarning();
 
       if (typeof onLoaded === 'function') {
@@ -876,11 +882,54 @@ function renderSalesHistory() {
     '<th>' + escapeHtml(dictionary.status) + '</th>' +
     '<th>' + escapeHtml(dictionary.actions) + '</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
 }
+function renderPublicationOptions() {
+  const itemSelect = document.getElementById('publication-item');
+  const platformSelect = document.getElementById('publication-platform');
+  if (!itemSelect || !platformSelect) return;
+  const activeItems = appData.items.filter(item => String(item.status).toLowerCase() === 'active');
+  itemSelect.innerHTML = '<option value="">Seleccioneu un article</option>' + activeItems.map(item => '<option value="' + escapeHtml(item.item_id) + '">' + escapeHtml(item.reference_no + ' — ' + item.title) + '</option>').join('');
+  const platforms = appData.platforms.filter(row => String(row.active).toUpperCase() !== 'FALSE');
+  platformSelect.innerHTML = '<option value="">Seleccioneu una plataforma</option>' + platforms.map(row => '<option value="' + escapeHtml(row.platform_id) + '">' + escapeHtml(row.name) + '</option>').join('');
+}
+function renderPublications() {
+  const container = document.getElementById('publications-table');
+  if (!container) return;
+  const entries = [...(appData.publications || [])].sort((a, b) => String(b.listed_at).localeCompare(String(a.listed_at)));
+  if (!entries.length) { container.innerHTML = '<div class="empty-state">Encara no hi ha publicacions registrades.</div>'; return; }
+  const rows = entries.map(pub => {
+    const item = appData.items.find(row => String(row.item_id) === String(pub.item_id));
+    const platform = appData.platforms.find(row => String(row.platform_id) === String(pub.platform_id));
+    const active = String(pub.status).toLowerCase() === 'active';
+    const action = active ? '<button class="small-button withdraw-publication" data-publication-id="' + escapeHtml(pub.publication_id) + '">Retira</button>' : '—';
+    return '<tr><td>' + escapeHtml(item ? item.reference_no : '—') + '</td><td>' + escapeHtml(item ? item.title : '—') + '</td><td>' + escapeHtml(platform ? platform.name : '—') + '</td><td>' + formatSaleDate(pub.listed_at) + '</td><td>' + (pub.withdrawn_at ? formatSaleDate(pub.withdrawn_at) : '—') + '</td><td>' + escapeHtml(active ? 'Activa' : 'Retirada') + '</td><td>' + action + '</td></tr>';
+  }).join('');
+  container.innerHTML = '<div class="table-scroll"><table class="data-table"><thead><tr><th>Ref.</th><th>Article</th><th>Plataforma</th><th>Publicada</th><th>Retirada</th><th>Estat</th><th>Acció</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+}
+function renderVatReport() {
+  const container = document.getElementById('vat-report');
+  if (!container) return;
+  const from = document.getElementById('report-from')?.value || '';
+  const to = document.getElementById('report-to')?.value || '';
+  const matching = appData.sales.filter(sale => { const date = String(sale.sale_date || '').slice(0, 10); return String(sale.status).toLowerCase() === 'active' && (!from || date >= from) && (!to || date <= to); });
+  const totals = matching.reduce((sum, sale) => ({ gross: sum.gross + (Number(sale.gross_price) || 0), vat: sum.vat + (Number(sale.vat_amount) || 0), net: sum.net + (Number(sale.net_amount) || 0) }), { gross: 0, vat: 0, net: 0 });
+  container.innerHTML = '<div class="stats-grid report-totals"><div class="stat-card"><div class="stat-label">Vendes</div><div class="stat-value">' + matching.length + '</div></div><div class="stat-card"><div class="stat-label">Total brut</div><div class="stat-value">' + formatCurrency(totals.gross) + '</div></div><div class="stat-card"><div class="stat-label">IVA</div><div class="stat-value">' + formatCurrency(totals.vat) + '</div></div><div class="stat-card"><div class="stat-label">Base imposable</div><div class="stat-value">' + formatCurrency(totals.net) + '</div></div></div>' + (matching.length ? '<p>' + matching.length + ' vendes incloses en el període.</p>' : '<div class="empty-state">No hi ha vendes en aquest període.</div>');
+}
+function submitPublication(event) {
+  event.preventDefault();
+  const button = document.getElementById('save-publication-button'); button.disabled = true;
+  google.script.run.withSuccessHandler(() => { button.disabled = false; document.getElementById('publication-form').reset(); loadData(() => showPage('publications')); }).withFailureHandler(error => { button.disabled = false; showError(error); }).recordPublication({ item_id: document.getElementById('publication-item').value, platform_id: document.getElementById('publication-platform').value, listed_at: document.getElementById('publication-date').value });
+}
+function withdrawPublicationFromTable(id) {
+  if (!window.confirm('Vols retirar aquesta publicació?')) return;
+  google.script.run.withSuccessHandler(() => loadData(() => showPage('publications'))).withFailureHandler(showError).withdrawPublication(id);
+}
 function handleItemTableClick(event) {
   const saleButton = event.target.closest('.sale-button');
   if (saleButton) { startSale(saleButton.dataset.itemId); return; }
   const reverseButton = event.target.closest('.reverse-sale-button');
   if (reverseButton) { reverseSaleFromHistory(reverseButton.dataset.saleId); return; }
+  const withdrawButton = event.target.closest('.withdraw-publication');
+  if (withdrawButton) { withdrawPublicationFromTable(withdrawButton.dataset.publicationId); return; }
   const button = event.target.closest('.edit-item-button');
   if (button) editItem(button.dataset.itemId);
 }
@@ -903,6 +952,12 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   document.getElementById('sale-form').addEventListener('submit', submitSale);
+  document.getElementById('publication-form').addEventListener('submit', submitPublication);
+  document.getElementById('report-from').addEventListener('change', renderVatReport);
+  document.getElementById('report-to').addEventListener('change', renderVatReport);
+  document.getElementById('publication-date').value = localToday();
+  document.getElementById('report-from').value = new Date().getFullYear() + '-01-01';
+  document.getElementById('report-to').value = localToday();
   document.getElementById('cancel-sale-button').addEventListener('click', cancelSale);
 
   loadData();

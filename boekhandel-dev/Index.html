@@ -275,10 +275,52 @@
         </div>
       </section>
 
-      <section id="sales-page" class="page hidden">
+<section id="sales-page" class="page hidden">
         <div class="content-card">
-          <h3>Vendes</h3>
-          <p>Aquesta secció s'incorporarà en la següent fase.</p>
+          <div class="card-heading">
+            <div>
+              <h3 data-i18n="sales">Vendes</h3>
+              <p data-i18n="saleIntro">Registreu la venda d’un article de l’inventari.</p>
+            </div>
+          </div>
+        </div>
+
+        <div id="sale-form-container" class="content-card sale-form-card hidden">
+          <div id="sale-item-summary" class="notice"></div>
+          <form id="sale-form">
+            <input id="sale-item-id" type="hidden">
+            <div class="form-grid">
+              <label class="field">
+                <span data-i18n="saleDate">Data de venda</span>
+                <input id="sale-date" type="date" required>
+              </label>
+              <label class="field">
+                <span data-i18n="saleGross">Preu de venda (IVA inclòs)</span>
+                <input id="sale-gross-price" type="text" inputmode="decimal" required>
+              </label>
+              <label class="field">
+                <span data-i18n="vatRateLabel">Percentatge d’IVA</span>
+                <input id="sale-vat-rate" type="text" inputmode="decimal" value="4" required>
+              </label>
+              <label class="field">
+                <span data-i18n="salesChannel">Canal de venda</span>
+                <input id="sale-channel" type="text" data-i18n-placeholder="salesChannelPlaceholder" placeholder="Ex.: botiga, fira o nom de la plataforma" maxlength="120" required>
+              </label>
+            </div>
+            <div class="form-actions">
+              <button id="cancel-sale-button" class="secondary-button" type="button" data-i18n="cancel">Cancel·la</button>
+              <button id="save-sale-button" class="primary-button" type="submit" data-i18n="saleSave">Registra la venda</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="content-card">
+          <div class="card-heading">
+            <div>
+              <h3 data-i18n="saleHistory">Historial de vendes</h3>
+            </div>
+          </div>
+          <div id="sales-history-table"></div>
         </div>
       </section>
 

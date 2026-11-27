@@ -392,6 +392,226 @@ function updateItem(itemId, form) {
   }
 }
 
+// Accepts a VAT percentage such as 4, 21, or a custom percentage.
+function parseVatRate(value) {
+  const normalized = String(value == null ? '' : value)
+    .trim()
+    .replace(',', '.');
+
+  if (!/^\d+(\.\d{1,2})?$/.test(normalized)) {
+    throw new Error('VAT_RATE_INVALID');
+  }
+
+  const rate = Number(normalized);
+  if (!Number.isFinite(rate) || rate < 0 || rate > 100) {
+    throw new Error('VAT_RATE_INVALID');
+  }
+
+  return rate;
+}
+
+function isValidSaleDate(value) {
+  const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return false;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+
+  return date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day;
+}
+
+function updateRecordFields(sheetName, keyField, keyValue, updates) {
+  const sheet = getSheet(sheetName);
+  const values = sheet.getDataRange().getValues();
+  if (!values.length) return false;
+
+  const headers = values[0];
+  const keyColumn = headers.indexOf(keyField);
+  if (keyColumn < 0) return false;
+
+  const rowIndex = values.findIndex((row, index) =>
+    index > 0 && String(row[keyColumn]) === String(keyValue)
+  );
+  if (rowIndex < 1) return false;
+
+  Object.entries(updates).forEach(([field, value]) => {
+    const column = headers.indexOf(field);
+    if (column < 0) {
+      throw new Error('No s’ha trobat la columna ' + field + '.');
+    }
+    sheet.getRange(rowIndex + 1, column + 1).setValue(value);
+  });
+
+  return true;
+}
+
+function saveSale(form) {
+  if (!form || !String(form.item_id || '').trim()) {
+    throw new Error('SALE_ITEM_REQUIRED');
+  }
+
+  const saleDate = String(form.sale_date || '').trim();
+  if (!isValidSaleDate(saleDate)) {
+    throw new Error('SALE_DATE_REQUIRED');
+  }
+
+  const salesChannel = String(form.sales_channel || '').trim();
+  if (!salesChannel) {
+    throw new Error('SALE_CHANNEL_REQUIRED');
+  }
+
+  let grossPrice;
+  try {
+    grossPrice = parsePrice(form.gross_price);
+  } catch (error) {
+    throw new Error('SALE_PRICE_INVALID');
+  }
+  if (grossPrice === '' || !Number.isFinite(grossPrice) || grossPrice < 0) {
+    throw new Error('SALE_PRICE_INVALID');
+  }
+
+  const vatRate = parseVatRate(form.vat_rate);
+  const vatAmount = Math.round(
+    (grossPrice * vatRate / (100 + vatRate) + Number.EPSILON) * 100
+  ) / 100;
+  const netAmount = Math.round(
+    (grossPrice - vatAmount + Number.EPSILON) * 100
+  ) / 100;
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+
+  try {
+    const item = getRecords('Items').find(record =>
+      String(record.item_id) === String(form.item_id)
+    );
+
+    if (!item) {
+      throw new Error('ITEM_NOT_FOUND');
+    }
+    if (String(item.status).toLowerCase() !== 'active') {
+      throw new Error('ITEM_NOT_ACTIVE');
+    }
+
+    const saleId = Utilities.getUuid();
+    const sale = {
+      sale_id: saleId,
+      item_id: item.item_id,
+      reference_no: item.reference_no,
+      sale_date: saleDate,
+      sales_channel: salesChannel,
+      gross_price: grossPrice,
+      vat_rate: vatRate,
+      vat_amount: vatAmount,
+      net_amount: netAmount,
+      invoice_created: false,
+      invoice_reference: '',
+      status: 'active'
+    };
+
+    appendRecord('Sales', sale);
+
+    try {
+      if (!updateRecordFields('Items', 'item_id', item.item_id, {
+        status: 'sold',
+        updated_at: new Date()
+      })) {
+        throw new Error('ITEM_UPDATE_FAILED');
+      }
+    } catch (error) {
+      updateRecordFields('Sales', 'sale_id', saleId, {
+        status: 'reversed'
+      });
+      throw error;
+    }
+
+    logChange(
+      'Sales',
+      saleId,
+      'CREATE',
+      'Recorded sale for item ' + item.reference_no
+    );
+
+    return {
+      success: true,
+      reference_no: item.reference_no
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function reverseSale(saleId) {
+  if (!saleId) {
+    throw new Error('SALE_NOT_FOUND');
+  }
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+
+  try {
+    const sale = getRecords('Sales').find(record =>
+      String(record.sale_id) === String(saleId)
+    );
+
+    if (!sale) {
+      throw new Error('SALE_NOT_FOUND');
+    }
+    if (String(sale.status).toLowerCase() !== 'active') {
+      throw new Error('SALE_ALREADY_REVERSED');
+    }
+
+    const item = getRecords('Items').find(record =>
+      String(record.item_id) === String(sale.item_id)
+    );
+    if (!item) {
+      throw new Error('ITEM_NOT_FOUND');
+    }
+    if (String(item.status).toLowerCase() !== 'sold') {
+      throw new Error('ITEM_NOT_SOLD');
+    }
+
+    if (!updateRecordFields('Items', 'item_id', item.item_id, {
+      status: 'active',
+      updated_at: new Date()
+    })) {
+      throw new Error('ITEM_UPDATE_FAILED');
+    }
+
+    try {
+      if (!updateRecordFields('Sales', 'sale_id', sale.sale_id, {
+        status: 'reversed'
+      })) {
+        throw new Error('SALE_UPDATE_FAILED');
+      }
+    } catch (error) {
+      updateRecordFields('Items', 'item_id', item.item_id, {
+        status: 'sold',
+        updated_at: new Date()
+      });
+      throw error;
+    }
+
+    logChange(
+      'Sales',
+      sale.sale_id,
+      'REVERSE',
+      'Reversed sale for item ' + sale.reference_no
+    );
+
+    return {
+      success: true,
+      reference_no: sale.reference_no
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 function isValidIsbn(isbn) {
   if (/^\d{13}$/.test(isbn)) {
     const sum = isbn.split('').reduce((total, digit, index) => {

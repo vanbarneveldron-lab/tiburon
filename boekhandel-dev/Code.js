@@ -8,9 +8,9 @@ const DB_SCHEMA = {
     'repetit_flag', 'photo_status', 'status', 'created_at',
     'updated_at'
   ],
-  // ItemTypes sheet columns: stable ID, Catalan/Spanish/English labels, then active flag.
+  // ItemTypes columns match the DEV sheet: stable ID, Catalan label, active flag, then Spanish/English labels.
   // Keep item_type_id values stable; display labels fall back to name_ca when a translation is blank.
-  ItemTypes: ['item_type_id', 'name_ca', 'name_es', 'name_en', 'active'],
+  ItemTypes: ['item_type_id', 'name_ca', 'active', 'name_es', 'name_en'],
   Platforms: ['platform_id', 'name', 'code', 'active'],
   Publications: [
     'publication_id', 'item_id', 'platform_id', 'status',

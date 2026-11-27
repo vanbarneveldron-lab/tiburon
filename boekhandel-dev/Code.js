@@ -137,18 +137,39 @@ function recordPublication(form) {
   if (!form || !String(form.item_id || '').trim()) throw new Error('PUBLICATION_ITEM_REQUIRED');
   const item = getRecords('Items').find(row => String(row.item_id) === String(form.item_id));
   if (!item || String(item.status).toLowerCase() !== 'active') throw new Error('PUBLICATION_ITEM_INVALID');
-  const platformId = String(form.platform_id || '').trim();
-  const platform = getRecords('Platforms').find(row => String(row.platform_id) === platformId && String(row.active).toUpperCase() !== 'FALSE');
-  if (!platform) throw new Error('PUBLICATION_PLATFORM_INVALID');
+
+  const rawPlatformIds = Array.isArray(form.platform_ids)
+    ? form.platform_ids
+    : [form.platform_id];
+  const platformIds = [...new Set(rawPlatformIds.map(id => String(id || '').trim()).filter(Boolean))];
+  if (!platformIds.length) throw new Error('PUBLICATION_PLATFORM_REQUIRED');
+
+  const activePlatforms = getRecords('Platforms')
+    .filter(row => String(row.active).toUpperCase() !== 'FALSE');
+  const platforms = platformIds.map(platformId =>
+    activePlatforms.find(row => String(row.platform_id) === platformId)
+  );
+  if (platforms.some(platform => !platform)) throw new Error('PUBLICATION_PLATFORM_INVALID');
+
   const listedAt = String(form.listed_at || '').trim();
   if (!isValidSaleDate(listedAt)) throw new Error('PUBLICATION_DATE_INVALID');
+
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
-    const id = Utilities.getUuid();
-    appendRecord('Publications', { publication_id: id, item_id: item.item_id, platform_id: platform.platform_id, status: 'active', listed_at: listedAt, withdrawn_at: '' });
-    logChange('Publications', id, 'CREATE', 'Recorded publication of item ' + item.reference_no + ' on ' + platform.name);
-    return { success: true };
+    platforms.forEach(platform => {
+      const id = Utilities.getUuid();
+      appendRecord('Publications', {
+        publication_id: id,
+        item_id: item.item_id,
+        platform_id: platform.platform_id,
+        status: 'active',
+        listed_at: listedAt,
+        withdrawn_at: ''
+      });
+      logChange('Publications', id, 'CREATE', 'Recorded publication of item ' + item.reference_no + ' on ' + platform.name);
+    });
+    return { success: true, count: platforms.length };
   } finally { lock.releaseLock(); }
 }
 

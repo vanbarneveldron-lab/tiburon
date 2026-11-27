@@ -889,7 +889,7 @@ function renderPublicationOptions() {
   const activeItems = appData.items.filter(item => String(item.status).toLowerCase() === 'active');
   itemSelect.innerHTML = '<option value="">Seleccioneu un article</option>' + activeItems.map(item => '<option value="' + escapeHtml(item.item_id) + '">' + escapeHtml(item.reference_no + ' — ' + item.title) + '</option>').join('');
   const platforms = appData.platforms.filter(row => String(row.active).toUpperCase() !== 'FALSE');
-  platformSelect.innerHTML = '<option value="">Seleccioneu una plataforma</option>' + platforms.map(row => '<option value="' + escapeHtml(row.platform_id) + '">' + escapeHtml(row.name) + '</option>').join('');
+  platformSelect.innerHTML = platforms.map(row => '<option value="' + escapeHtml(row.platform_id) + '">' + escapeHtml(row.name) + '</option>').join('');
 }
 function renderPublications() {
   const container = document.getElementById('publications-table');
@@ -916,8 +916,25 @@ function renderVatReport() {
 }
 function submitPublication(event) {
   event.preventDefault();
-  const button = document.getElementById('save-publication-button'); button.disabled = true;
-  google.script.run.withSuccessHandler(() => { button.disabled = false; document.getElementById('publication-form').reset(); loadData(() => showPage('publications')); }).withFailureHandler(error => { button.disabled = false; showError(error); }).recordPublication({ item_id: document.getElementById('publication-item').value, platform_id: document.getElementById('publication-platform').value, listed_at: document.getElementById('publication-date').value });
+  const button = document.getElementById('save-publication-button');
+  const platformIds = Array.from(document.getElementById('publication-platform').selectedOptions)
+    .map(option => option.value);
+  button.disabled = true;
+  google.script.run
+    .withSuccessHandler(() => {
+      button.disabled = false;
+      document.getElementById('publication-form').reset();
+      loadData(() => showPage('publications'));
+    })
+    .withFailureHandler(error => {
+      button.disabled = false;
+      showError(error);
+    })
+    .recordPublication({
+      item_id: document.getElementById('publication-item').value,
+      platform_ids: platformIds,
+      listed_at: document.getElementById('publication-date').value
+    });
 }
 function withdrawPublicationFromTable(id) {
   if (!window.confirm('Vols retirar aquesta publicació?')) return;

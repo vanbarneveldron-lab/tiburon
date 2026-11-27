@@ -284,6 +284,7 @@ function translateMessage(message) {
 }
 
 function showPage(page) {
+  if (page === 'new-item') document.getElementById('sell-item-button').classList.add('hidden');
   document.querySelectorAll('.page').forEach(el => {
     el.classList.add('hidden');
   });
@@ -728,6 +729,9 @@ function editItem(itemId) {
 
   selectedItemId = itemId;
   showPage('new-item');
+    const sellButton = document.getElementById('sell-item-button');
+    sellButton.textContent = translations[getLanguage()].sellItem;
+    if (String(item.status || '').toLowerCase() === 'active') sellButton.classList.remove('hidden');
 
   const fields = [
     'item_type_id',
@@ -894,6 +898,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Acties vanuit dashboard, inventaris en verkoopgeschiedenis
   document.addEventListener('click', handleItemTableClick);
+  document.getElementById('sell-item-button').addEventListener('click', () => {
+    if (selectedItemId) startSale(selectedItemId);
+  });
+
   document.getElementById('sale-form').addEventListener('submit', submitSale);
   document.getElementById('cancel-sale-button').addEventListener('click', cancelSale);
 

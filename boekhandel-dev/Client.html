@@ -100,6 +100,17 @@ const translations = {
   }
 };
 
+translations.ca.isbnRequired='Introduïu primer un ISBN.'; translations.es.isbnRequired='Introduce primero un ISBN.'; translations.en.isbnRequired='Enter an ISBN first.';
+translations.ca.isbnSearching='Cercant...'; translations.es.isbnSearching='Buscando...'; translations.en.isbnSearching='Searching...';
+translations.ca.lookupButton='Cercar'; translations.es.lookupButton='Buscar'; translations.en.lookupButton='Search';
+translations.ca.isbnFound='Dades del llibre trobades a {source}. Comproveu les dades introduïdes.'; translations.es.isbnFound='Datos del libro encontrados en {source}. Comprueba los datos introducidos.'; translations.en.isbnFound='Book details found via {source}. Check the information entered.';
+translations.ca.isbnInvalid='Aquest ISBN no és vàlid. Comproveu el número.'; translations.es.isbnInvalid='Este ISBN no es válido. Comprueba el número.'; translations.en.isbnInvalid='This ISBN is invalid. Check the number.';
+translations.ca.isbnNotFound='No s’ha trobat cap llibre per a aquest ISBN.'; translations.es.isbnNotFound='No se ha encontrado ningún libro para este ISBN.'; translations.en.isbnNotFound='No book was found for this ISBN.';
+translations.ca.isbnError='S’ha produït un error en cercar el llibre.'; translations.es.isbnError='Se produjo un error al buscar el libro.'; translations.en.isbnError='Something went wrong while looking up the book.';
+translations.ca.typePlaceholder='Seleccioneu un tipus'; translations.es.typePlaceholder='Selecciona un tipo'; translations.en.typePlaceholder='Select a type';
+translations.ca.allTypes='Tots els tipus'; translations.es.allTypes='Todos los tipos'; translations.en.allTypes='All types';
+translations.ca.noTypes='Configureu primer els tipus d’article al full ItemTypes.'; translations.es.noTypes='Configura primero los tipos de artículo en la hoja ItemTypes.'; translations.en.noTypes='Configure item types in the ItemTypes sheet first.';
+translations.ca.nextRef='La pròxima referència disponible serà: {value}'; translations.es.nextRef='La próxima referencia disponible será: {value}'; translations.en.nextRef='The next available reference will be: {value}';
 function getLanguage() {
   const language = appData && appData.language
     ? String(appData.language).toLowerCase()
@@ -119,13 +130,23 @@ function applyTranslations() {
       element.textContent = dictionary[key];
     }
   });
+  const lookupButton = document.getElementById('lookup_isbn_button');
+  if (lookupButton) lookupButton.textContent = dictionary.lookupButton;
 }
 
 function translateMessage(message) {
   const language = getLanguage();
   const dictionary = translations[language] || translations.ca;
 
-  return dictionary[message] || message;
+  if (dictionary[message]) return dictionary[message];
+  const text = String(message || '');
+  const noBook = { 'Dit ISBN is ongeldig. Controleer het nummer.':'isbnInvalid', 'Geen boek gevonden voor dit ISBN.':'isbnNotFound', 'Er ging iets mis bij het opzoeken.':'isbnError' }[text];
+  if (noBook) return dictionary[noBook];
+  const http = text.match(/^Open Library geeft HTTP-fout (\d+)\. Probeer het later opnieuw\.$/);
+  if (http) return {ca:'Open Library ha retornat l’error HTTP {n}. Torneu-ho a provar més tard.',es:'Open Library devolvió el error HTTP {n}. Inténtalo de nuevo más tarde.',en:'Open Library returned HTTP error {n}. Please try again later.'}[language].replace('{n}',http[1]);
+  const next = text.match(/^La pròxima referència disponible serà: (.+)$/);
+  if (next) return dictionary.nextRef.replace('{value}',next[1]);
+  return message;
 }
 
 function showPage(page) {
@@ -289,11 +310,9 @@ function renderItemTypes() {
 
   const previousFilter = filterSelect.value;
 
-  itemSelect.innerHTML =
-    '<option value="">Selecciona un tipus</option>';
-
-  filterSelect.innerHTML =
-    '<option value="">Tots els tipus</option>';
+  const dictionary = translations[getLanguage()];
+  itemSelect.innerHTML = '<option value="">' + dictionary.typePlaceholder + '</option>';
+  filterSelect.innerHTML = '<option value="">' + dictionary.allTypes + '</option>';
 
   activeTypes.forEach(type => {
     const itemOption = document.createElement('option');
@@ -356,7 +375,7 @@ function prepareNewItem() {
   if (!appData.itemTypes.length) {
     const warning = document.getElementById('reference-warning');
     warning.textContent =
-      'Cal configurar primer els tipus d’article al full ItemTypes.';
+      translateMessage('Cal configurar primer els tipus d’article al full ItemTypes.');
     warning.classList.remove('hidden');
     document.getElementById('save-button').disabled = true;
   }
@@ -504,25 +523,26 @@ function lookupIsbn() {
 
   const isbn = isbnInput.value.trim();
 
+  const dictionary = translations[getLanguage()];
   message.classList.add('hidden');
   message.textContent = '';
 
   if (!isbn) {
-    message.textContent = 'Voer eerst een ISBN in.';
+    message.textContent = dictionary.isbnRequired;
     message.classList.remove('hidden');
     return;
   }
 
   button.disabled = true;
-  button.textContent = 'Zoeken...';
+  button.textContent = dictionary.isbnSearching;
 
   google.script.run
     .withSuccessHandler(result => {
       button.disabled = false;
-      button.textContent = 'Opzoeken';
+      button.textContent = dictionary.lookupButton;
 
       if (!result.found) {
-        message.textContent = result.message;
+        message.textContent = translateMessage(result.message);
         message.classList.remove('hidden');
         return;
       }
@@ -536,17 +556,16 @@ function lookupIsbn() {
       fillMetadataField('pages', result.pages);
       fillMetadataField('dimensions', result.dimensions);
 
-      message.textContent =
-        'Boekgegevens gevonden via ' + result.source +
-        '. Controleer de ingevulde gegevens.';
+      message.textContent = dictionary.isbnFound.replace('{source}', result.source);
       message.classList.remove('hidden');
     })
     .withFailureHandler(error => {
       button.disabled = false;
-      button.textContent = 'Opzoeken';
+      button.textContent = dictionary.lookupButton;
 
-      message.textContent =
-        error.message || 'Er ging iets mis bij het opzoeken.';
+      message.textContent = translateMessage(
+        error.message || 'Er ging iets mis bij het opzoeken.'
+      );
       message.classList.remove('hidden');
     })
     .lookupBookByIsbn(isbn);

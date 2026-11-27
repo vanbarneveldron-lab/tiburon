@@ -42,7 +42,12 @@ const translations = {
     saleGross: "Preu de venda (IVA inclòs)",
     vatRateLabel: "Percentatge d’IVA",
     salesChannel: "Canal de venda",
-    salesChannelPlaceholder: "Ex.: botiga, fira o nom de la plataforma",
+    salesChannelPlaceholder: "Ex.: botiga o fira",
+    otherSaleChannel: "Altre canal o venda al local",
+    otherSaleChannelOption: "Altre canal / venda al local",
+    removeNeeded: "Cal retirar",
+    confirmRemoval: "Confirma la retirada d’aquesta plataforma?",
+    withdrawConfirm: "Vols retirar aquesta publicació?",
     saleSave: "Registra la venda",
     cancel: "Cancel·la",
     sellItem: "Vendre",
@@ -68,6 +73,8 @@ const translations = {
     error_SALE_ITEM_REQUIRED: "Selecciona un article vàlid per a la venda.",
     error_SALE_DATE_REQUIRED: "Introdueix una data de venda vàlida.",
     error_SALE_CHANNEL_REQUIRED: "Indica el canal de venda.",
+    error_SALE_PLATFORM_INVALID: "La plataforma no és una publicació activa d’aquest article.",
+    error_PUBLICATION_UPDATE_FAILED: "No s’ha pogut actualitzar la publicació.",
     error_SALE_PRICE_INVALID: "El preu de venda no és vàlid.",
     error_VAT_RATE_INVALID: "El percentatge d’IVA ha de ser entre 0 i 100.",
     error_ITEM_NOT_FOUND: "No s’ha trobat l’article.",
@@ -111,7 +118,12 @@ const translations = {
     saleGross: "Precio de venta (IVA incluido)",
     vatRateLabel: "Porcentaje de IVA",
     salesChannel: "Canal de venta",
-    salesChannelPlaceholder: "Ej.: tienda, feria o nombre de la plataforma",
+    salesChannelPlaceholder: "Ej.: tienda o feria",
+    otherSaleChannel: "Otro canal o venta en el local",
+    otherSaleChannelOption: "Otro canal / venta en el local",
+    removeNeeded: "Pendiente de retirar",
+    confirmRemoval: "¿Confirmas que se ha retirado esta publicación?",
+    withdrawConfirm: "¿Quieres retirar esta publicación?",
     saleSave: "Registrar venta",
     cancel: "Cancelar",
     sellItem: "Vender",
@@ -137,6 +149,8 @@ const translations = {
     error_SALE_ITEM_REQUIRED: "Selecciona un artículo válido para la venta.",
     error_SALE_DATE_REQUIRED: "Introduce una fecha de venta válida.",
     error_SALE_CHANNEL_REQUIRED: "Indica el canal de venta.",
+    error_SALE_PLATFORM_INVALID: "La plataforma no es una publicación activa de este artículo.",
+    error_PUBLICATION_UPDATE_FAILED: "No se ha podido actualizar la publicación.",
     error_SALE_PRICE_INVALID: "El precio de venta no es válido.",
     error_VAT_RATE_INVALID: "El porcentaje de IVA debe estar entre 0 y 100.",
     error_ITEM_NOT_FOUND: "No se ha encontrado el artículo.",
@@ -180,7 +194,12 @@ const translations = {
     saleGross: "Selling price (including VAT)",
     vatRateLabel: "VAT rate",
     salesChannel: "Sales channel",
-    salesChannelPlaceholder: "E.g. shop, fair, or platform name",
+    salesChannelPlaceholder: "E.g. shop or fair",
+    otherSaleChannel: "Other channel or in-store sale",
+    otherSaleChannelOption: "Other channel / in-store sale",
+    removeNeeded: "Removal needed",
+    confirmRemoval: "Confirm that this listing has been removed?",
+    withdrawConfirm: "Withdraw this publication?",
     saleSave: "Record sale",
     cancel: "Cancel",
     sellItem: "Sell",
@@ -206,6 +225,7 @@ const translations = {
     error_SALE_ITEM_REQUIRED: "Select a valid item for this sale.",
     error_SALE_DATE_REQUIRED: "Enter a valid sale date.",
     error_SALE_CHANNEL_REQUIRED: "Enter the sales channel.",
+    error_SALE_PLATFORM_INVALID: "This platform is not an active listing for this item.",
     error_SALE_PRICE_INVALID: "The selling price is invalid.",
     error_VAT_RATE_INVALID: "VAT rate must be between 0 and 100.",
     error_ITEM_NOT_FOUND: "The item could not be found.",
@@ -215,6 +235,7 @@ const translations = {
     error_ITEM_NOT_SOLD: "The item is not marked as sold.",
     error_ITEM_UPDATE_FAILED: "The item could not be updated.",
     error_SALE_UPDATE_FAILED: "The sale could not be updated.",
+    error_PUBLICATION_UPDATE_FAILED: "The publication could not be updated.",
     // Toevoegen aan translations.en
     appName: 'Velles i Novelles',
     appSubtitle: 'Inventory management',
@@ -786,11 +807,40 @@ function startSale(itemId) {
   document.getElementById('sale-date').value = localToday();
   document.getElementById('sale-gross-price').value = item.asking_price === '' || item.asking_price == null ? '' : item.asking_price;
   document.getElementById('sale-vat-rate').value = '4';
-  document.getElementById('sale-channel').value = '';
+  populateSaleChannels(item.item_id);
   document.getElementById('sale-item-summary').textContent = dictionary.saleItem + ' ' + item.reference_no + ' — ' + item.title;
   showPage('sales');
   document.getElementById('sale-form-container').classList.remove('hidden');
   document.getElementById('sale-date').focus();
+}
+function populateSaleChannels(itemId) {
+  const dictionary = translations[getLanguage()];
+  const channel = document.getElementById('sale-channel-type');
+  const otherField = document.getElementById('sale-other-channel-field');
+  const otherInput = document.getElementById('sale-other-channel');
+  const activePublicationIds = new Set((appData.publications || []).filter(pub =>
+    String(pub.item_id) === String(itemId) && String(pub.status).toLowerCase() === 'active'
+  ).map(pub => String(pub.platform_id)));
+  const seenPlatformIds = new Set();
+  const activePlatforms = appData.platforms.filter(platform => {
+    const id = String(platform.platform_id);
+    if (String(platform.active).toUpperCase() === 'FALSE' || !activePublicationIds.has(id) || seenPlatformIds.has(id)) return false;
+    seenPlatformIds.add(id);
+    return true;
+  });
+  channel.innerHTML = '<option value="">' + escapeHtml(dictionary.salesChannel) + '</option>' +
+    activePlatforms.map(platform => '<option value="platform:' + escapeHtml(platform.platform_id) + '">' + escapeHtml(platform.name) + '</option>').join('') +
+    '<option value="other">' + escapeHtml(dictionary.otherSaleChannelOption) + '</option>';
+  otherField.classList.add('hidden');
+  otherInput.required = false;
+  otherInput.value = '';
+}
+function updateSaleChannelFields() {
+  const isOther = document.getElementById('sale-channel-type').value === 'other';
+  const field = document.getElementById('sale-other-channel-field');
+  const input = document.getElementById('sale-other-channel');
+  field.classList.toggle('hidden', !isOther);
+  input.required = isOther;
 }
 function cancelSale() {
   document.getElementById('sale-form').reset();
@@ -803,7 +853,10 @@ function submitSale(event) {
     sale_date: document.getElementById('sale-date').value,
     gross_price: document.getElementById('sale-gross-price').value.trim(),
     vat_rate: document.getElementById('sale-vat-rate').value.trim(),
-    sales_channel: document.getElementById('sale-channel').value.trim()
+    sales_channel_type: document.getElementById('sale-channel-type').value === 'other' ? 'other' : 'platform',
+    sales_channel: document.getElementById('sale-channel-type').value === 'other'
+      ? document.getElementById('sale-other-channel').value.trim()
+      : document.getElementById('sale-channel-type').value.replace(/^platform:/, '')
   };
   const submitButton = document.getElementById('save-sale-button');
   submitButton.disabled = true;
@@ -899,9 +952,12 @@ function renderPublications() {
   const rows = entries.map(pub => {
     const item = appData.items.find(row => String(row.item_id) === String(pub.item_id));
     const platform = appData.platforms.find(row => String(row.platform_id) === String(pub.platform_id));
-    const active = String(pub.status).toLowerCase() === 'active';
-    const action = active ? '<button class="small-button withdraw-publication" data-publication-id="' + escapeHtml(pub.publication_id) + '">Retira</button>' : '—';
-    return '<tr><td>' + escapeHtml(item ? item.reference_no : '—') + '</td><td>' + escapeHtml(item ? item.title : '—') + '</td><td>' + escapeHtml(platform ? platform.name : '—') + '</td><td>' + formatSaleDate(pub.listed_at) + '</td><td>' + (pub.withdrawn_at ? formatSaleDate(pub.withdrawn_at) : '—') + '</td><td>' + escapeHtml(active ? 'Activa' : 'Retirada') + '</td><td>' + action + '</td></tr>';
+    const status = String(pub.status).toLowerCase();
+    const active = status === 'active';
+    const removalNeeded = status === 'remove_needed';
+    const action = active || removalNeeded ? '<button class="small-button withdraw-publication" data-publication-id="' + escapeHtml(pub.publication_id) + '" data-removal-needed="' + removalNeeded + '">' + (removalNeeded ? escapeHtml(translations[getLanguage()].confirmRemoval) : 'Retira') + '</button>' : '—';
+    const statusLabel = removalNeeded ? translations[getLanguage()].removeNeeded : (active ? 'Activa' : 'Retirada');
+    return '<tr><td>' + escapeHtml(item ? item.reference_no : '—') + '</td><td>' + escapeHtml(item ? item.title : '—') + '</td><td>' + escapeHtml(platform ? platform.name : '—') + '</td><td>' + formatSaleDate(pub.listed_at) + '</td><td>' + (pub.withdrawn_at ? formatSaleDate(pub.withdrawn_at) : '—') + '</td><td>' + escapeHtml(statusLabel) + '</td><td>' + action + '</td></tr>';
   }).join('');
   container.innerHTML = '<div class="table-scroll"><table class="data-table"><thead><tr><th>Ref.</th><th>Article</th><th>Plataforma</th><th>Publicada</th><th>Retirada</th><th>Estat</th><th>Acció</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
 }
@@ -937,8 +993,13 @@ function submitPublication(event) {
     });
 }
 function withdrawPublicationFromTable(id) {
-  if (!window.confirm('Vols retirar aquesta publicació?')) return;
+  const status = eventStatusForPublication(id);
+  if (!window.confirm(status ? translations[getLanguage()].confirmRemoval : translations[getLanguage()].withdrawConfirm)) return;
   google.script.run.withSuccessHandler(() => loadData(() => showPage('publications'))).withFailureHandler(showError).withdrawPublication(id);
+}
+function eventStatusForPublication(id) {
+  const publication = (appData.publications || []).find(record => String(record.publication_id) === String(id));
+  return publication && String(publication.status).toLowerCase() === 'remove_needed';
 }
 function handleItemTableClick(event) {
   const saleButton = event.target.closest('.sale-button');
@@ -969,6 +1030,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   document.getElementById('sale-form').addEventListener('submit', submitSale);
+  document.getElementById('sale-channel-type').addEventListener('change', updateSaleChannelFields);
   document.getElementById('publication-form').addEventListener('submit', submitPublication);
   document.getElementById('report-from').addEventListener('change', renderVatReport);
   document.getElementById('report-to').addEventListener('change', renderVatReport);

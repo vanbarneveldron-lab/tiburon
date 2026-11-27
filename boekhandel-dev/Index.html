@@ -314,7 +314,11 @@
               </label>
               <label class="field">
                 <span data-i18n="salesChannel">Canal de venda</span>
-                <input id="sale-channel" type="text" data-i18n-placeholder="salesChannelPlaceholder" placeholder="Ex.: botiga, fira o nom de la plataforma" maxlength="120" required>
+                <select id="sale-channel-type" required></select>
+              </label>
+              <label id="sale-other-channel-field" class="field hidden">
+                <span data-i18n="otherSaleChannel">Altre canal o venda al local</span>
+                <input id="sale-other-channel" type="text" maxlength="120" data-i18n-placeholder="salesChannelPlaceholder" placeholder="Ex.: botiga o fira">
               </label>
             </div>
             <div class="form-actions">

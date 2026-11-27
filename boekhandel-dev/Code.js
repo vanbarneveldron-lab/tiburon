@@ -179,7 +179,7 @@ function withdrawPublication(publicationId) {
   try {
     const publication = getRecords('Publications').find(row => String(row.publication_id) === String(publicationId));
     if (!publication) throw new Error('PUBLICATION_NOT_FOUND');
-    if (String(publication.status).toLowerCase() !== 'active') throw new Error('PUBLICATION_ALREADY_WITHDRAWN');
+    if (!['active', 'remove_needed'].includes(String(publication.status).toLowerCase())) throw new Error('PUBLICATION_ALREADY_WITHDRAWN');
     const date = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
     if (!updateRecordFields('Publications', 'publication_id', publicationId, { status: 'withdrawn', withdrawn_at: date })) throw new Error('PUBLICATION_UPDATE_FAILED');
     logChange('Publications', publicationId, 'WITHDRAW', 'Withdrew publication');
@@ -514,10 +514,9 @@ function saveSale(form) {
     throw new Error('SALE_DATE_REQUIRED');
   }
 
-  const salesChannel = String(form.sales_channel || '').trim();
-  if (!salesChannel) {
-    throw new Error('SALE_CHANNEL_REQUIRED');
-  }
+  const salesChannelType = String(form.sales_channel_type || '').trim();
+  const salesChannelValue = String(form.sales_channel || '').trim();
+  if (!salesChannelType || !salesChannelValue) throw new Error('SALE_CHANNEL_REQUIRED');
 
   let grossPrice;
   try {
@@ -552,6 +551,26 @@ function saveSale(form) {
       throw new Error('ITEM_NOT_ACTIVE');
     }
 
+    const publications = getRecords('Publications');
+    let salesChannel = salesChannelValue;
+    if (salesChannelType === 'platform') {
+      const platform = getRecords('Platforms').find(record =>
+        String(record.platform_id) === salesChannelValue && String(record.active).toUpperCase() !== 'FALSE'
+      );
+      const matching = publications.filter(record =>
+        String(record.item_id) === String(item.item_id) &&
+        String(record.platform_id) === salesChannelValue &&
+        String(record.status).toLowerCase() === 'active'
+      );
+      if (!platform || !matching.length) throw new Error('SALE_PLATFORM_INVALID');
+      salesChannel = platform.name;
+    } else if (salesChannelType !== 'other') {
+      throw new Error('SALE_CHANNEL_REQUIRED');
+    }
+    const publicationsToRemove = publications.filter(record =>
+      String(record.item_id) === String(item.item_id) && String(record.status).toLowerCase() === 'active'
+    ).map(record => record.publication_id);
+
     const saleId = Utilities.getUuid();
     const sale = {
       sale_id: saleId,
@@ -571,6 +590,11 @@ function saveSale(form) {
     appendRecord('Sales', sale);
 
     try {
+      publicationsToRemove.forEach(publicationId => {
+        if (!updateRecordFields('Publications', 'publication_id', publicationId, { status: 'remove_needed' })) {
+          throw new Error('PUBLICATION_UPDATE_FAILED');
+        }
+      });
       if (!updateRecordFields('Items', 'item_id', item.item_id, {
         status: 'sold',
         updated_at: new Date()
@@ -578,6 +602,7 @@ function saveSale(form) {
         throw new Error('ITEM_UPDATE_FAILED');
       }
     } catch (error) {
+      publicationsToRemove.forEach(publicationId => updateRecordFields('Publications', 'publication_id', publicationId, { status: 'active' }));
       updateRecordFields('Sales', 'sale_id', saleId, {
         status: 'reversed'
       });
@@ -650,6 +675,10 @@ function reverseSale(saleId) {
       });
       throw error;
     }
+
+    getRecords('Publications').filter(record =>
+      String(record.item_id) === String(item.item_id) && String(record.status).toLowerCase() === 'remove_needed'
+    ).forEach(record => updateRecordFields('Publications', 'publication_id', record.publication_id, { status: 'active' }));
 
     logChange(
       'Sales',
